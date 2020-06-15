@@ -1,0 +1,156 @@
+#include <LiquidCrystal.h>
+#define pGas A5
+
+LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
+const int smokeAlarm = 10;
+const int LDR = 0;
+const int fridgeAlarm = 6;
+int portaAberta = 0;
+int Pwn = 200;
+int tem = 0;
+
+//Wi-fi
+String ssid     = "Simulator Wifi";  // SSID to connect to
+String password = ""; // Our virtual wifi has no password (so dont do your banking stuff on this network)
+String host     = "api.thingspeak.com"; // Open Weather Map API
+const int httpPort   = 80;
+//String uri     = "/update?api_key=X8IBBCUU7VGM8RTR&field1= ";
+String uri     = "/update?api_key=SGE0XPFB2L2MJC1T&field1= ";
+
+
+int setupESP8266(void) {
+  // Start our ESP8266 Serial Communication
+  Serial.begin(115200);   // Serial connection over USB to computer
+  Serial.println("AT");   // Serial connection on Tx / Rx port to ESP8266
+  delay(10);        // Wait a little for the ESP to respond
+  if (!Serial.find("OK")) return 1;
+    
+  // Connect to 123D Circuits Simulator Wifi
+  Serial.println("AT+CWJAP=\"" + ssid + "\",\"" + password + "\"");
+  delay(10);        // Wait a little for the ESP to respond
+  if (!Serial.find("OK")) return 2;
+  
+  // Open TCP connection to the host:
+  Serial.println("AT+CIPSTART=\"TCP\",\"" + host + "\"," + httpPort);
+  delay(50);        // Wait a little for the ESP to respond
+  if (!Serial.find("OK")) return 3;
+  
+  return 0;
+}
+
+void enviaTempoESP8266(void) {
+  
+  
+  int temp = map(analogRead(A0), 0, 1024, 0,101);
+  portaAberta = temp;
+  
+  // Construct our HTTP call
+  String httpPacket = "GET " + uri + String(temp) + " HTTP/1.1\r\nHost: " + host + "\r\n\r\n";
+  int length = httpPacket.length();
+  
+  // Send our message length
+  Serial.print("AT+CIPSEND=");
+  Serial.println(length);
+  delay(10); // Wait a little for the ESP to respond if (!Serial.find(">")) return -1;
+
+  // Send our http request
+  Serial.print(httpPacket);
+  delay(10); // Wait a little for the ESP to respond
+  if (!Serial.find("SEND OK\r\n")) return;
+  
+  
+}
+
+//LCD
+void limpaTela(){
+  
+  delay(1500);
+  lcd.setCursor(0,1);
+  lcd.print("                ");
+  lcd.setCursor(0,1);
+}
+
+void gas(){
+
+  int sinalGas = analogRead(pGas);
+  sinalGas = map(sinalGas, 300, 750, 0, 100);
+  lcd.print(sinalGas);
+  
+  if(sinalGas >= 50){ // obs valor
+  	digitalWrite(smokeAlarm, HIGH);
+    delay(500);
+  	limpaTela();
+  	lcd.print("Saia do local ");
+    
+  }else{
+    digitalWrite(smokeAlarm, LOW);
+    delay(500);
+  }
+    
+}
+
+void luz(){
+
+  Serial.println(portaAberta);
+  if(portaAberta > 50){
+    tem++;
+    Serial.println(tem);
+    
+  }else{
+    tem = 0;
+  }
+  
+  if(tem >= 3){
+  	digitalWrite(fridgeAlarm, HIGH);
+    delay(500);
+  }else{
+  	digitalWrite(fridgeAlarm, LOW);
+    delay(500);
+  }
+}
+
+
+
+void setup() {
+  
+  //Wi-fi
+  setupESP8266();
+  
+  //LCD
+  lcd.begin(16, 2);
+  //Print a message to the LCD.
+  lcd.print("Monitoramento:");
+  
+  //SmokeAlarm
+  pinMode(smokeAlarm, OUTPUT);
+  
+  //fridgeAlarm
+  pinMode(fridgeAlarm, OUTPUT);
+  
+ 
+  
+  
+}
+
+void loop() {
+  
+  //SensorLuz
+  luz();
+  delay(500);
+  
+  //gas
+  limpaTela();
+  lcd.print("Gas:  ");
+  gas();
+  delay(500);
+  
+  //Wi-fi
+  enviaTempoESP8266();
+  delay(500);
+  
+ 
+}
+
+
+
+ 
